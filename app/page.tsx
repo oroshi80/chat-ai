@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/select";
 import ReactMarkdown from "react-markdown";
 
+// Types
+
 type Models = {
   name: string;
   size: string;
@@ -28,46 +30,96 @@ type Models = {
   updated: string;
 };
 
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export default function Home() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState<string>("");
-  const [model, setModel] = useState<string>("");
+  const [model, setModel] = useState<string | undefined>(undefined);
   const [models, setModels] = useState<Models[]>([]);
-  const [response, setResponse] = useState<string>("");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState<string>("");
 
   useEffect(() => {
     const storedModel = localStorage.getItem("model");
     if (storedModel) setModel(storedModel);
 
-    // Fetch available models
     fetch("/api/models")
       .then((res) => res.json())
-      .then((data) => {
-        setModels(data.tags);
-      })
+      .then((data) => setModels(data.tags))
       .catch((err) => console.error("Failed to fetch models:", err));
   }, []);
 
-  const handleAsk = async () => {
-    setResponse(""); // Clear previous response
+  const handleAsk = async (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>
+  ) => {
+    event.preventDefault();
 
-    const res = await fetch("/api/ollama", {
+    // Clear previous message to avoid appending errors
+    setStreamingMessage("");
+
+    // Make the request to the backend
+    const responseStream = await fetch("/api/ollama", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: model,
-        prompt: message,
-      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: message, model: model }),
     });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error("Error response:", errorText);
-      setResponse("Error fetching response");
+    const reader = responseStream.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      console.error("Error: Reader is undefined.");
       return;
     }
 
-    const data = await res.json(); // assuming API returns JSON
-    setResponse(data.response || "No response found");
+    let fullResponse = ""; // This will hold the final response content
+
+    // Start processing the stream
+    const processStream = async () => {
+      const processChunk = async ({
+        done,
+        value,
+      }: ReadableStreamDefaultReader<Uint8Array>) => {
+        if (done) {
+          console.log("Stream finished.");
+          return;
+        }
+
+        // Decode the current chunk
+        const decodedChunk = decoder.decode(value, { stream: true });
+
+        // Only append if new chunk is non-empty
+        if (decodedChunk) {
+          fullResponse += decodedChunk;
+          setStreamingMessage(fullResponse); // Update UI with the new chunk
+        }
+
+        // Read the next chunk
+        reader
+          .read()
+          .then(processChunk)
+          .catch((err) => {
+            console.error("Error reading the stream:", err);
+          });
+      };
+
+      // Start the chunk reading
+      reader
+        .read()
+        .then(processChunk)
+        .catch((err) => {
+          console.error("Stream read error:", err);
+        });
+    };
+
+    // Start streaming
+    processStream();
   };
 
   return (
@@ -83,18 +135,18 @@ export default function Home() {
             <div className="flex items-center">
               Model:
               <Select
-                value={model}
                 onValueChange={(value) => {
                   setModel(value);
                   localStorage.setItem("model", value);
                 }}
+                value={model || ""}
               >
                 <SelectTrigger className="w-[180px] ml-2 border rounded p-1">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((m, _index) => (
-                    <SelectItem key={_index} value={m.name}>
+                  {models.map((m, index) => (
+                    <SelectItem key={index} value={m.name}>
                       {m.name}
                     </SelectItem>
                   ))}
@@ -104,10 +156,47 @@ export default function Home() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent>
-          <div className="border-neutral-700 bg-neutral-800 rounded-md m-2 p-2">
-            <ReactMarkdown>{response}</ReactMarkdown>
-          </div>
+        <CardContent className="space-y-4 max-h-[500px] overflow-y-auto">
+          {messages.map((msg, index) => (
+            <div
+              key={index}
+              className={`flex ${
+                msg.role === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
+              <div
+                className={`flex items-start gap-2 max-w-[80%] ${
+                  msg.role === "user" ? "flex-row-reverse" : ""
+                }`}
+              >
+                <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
+                  {msg.role === "user" ? "🧑" : "🤖"}
+                </div>
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    msg.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-neutral-800 text-white"
+                  }`}
+                >
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {streamingMessage && (
+            <div className="flex justify-start">
+              <div className="flex items-start gap-2 max-w-[80%]">
+                <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
+                  🤖
+                </div>
+                <div className="rounded-lg p-3 text-sm bg-neutral-800 text-white">
+                  <ReactMarkdown>{streamingMessage}</ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
 
         <CardFooter>
@@ -120,7 +209,7 @@ export default function Home() {
                 onChange={(e) => setMessage(e.target.value)}
               />
             </div>
-            <Button onClick={handleAsk}>
+            <Button onClick={handleAsk} disabled={isLoaded}>
               <SendHorizontal />
             </Button>
           </div>
