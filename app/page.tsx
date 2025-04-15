@@ -21,7 +21,6 @@ import {
 import ReactMarkdown from "react-markdown";
 
 // Types
-
 type Models = {
   name: string;
   size: string;
