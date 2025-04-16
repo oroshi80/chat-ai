@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://127.0.0.1:11434'
 
 export async function POST(req: NextRequest): Promise<Response> {
-    const { prompt, model } = await req.json();
+    // const { prompt, model } = await req.json();
+    const { messages, model } = await req.json();
 
     const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
         method: 'POST',
@@ -12,12 +13,13 @@ export async function POST(req: NextRequest): Promise<Response> {
         },
         body: JSON.stringify({
             model,
-            messages: [
-                {
-                    role: 'user',
-                    content: prompt,
-                },
-            ],
+            messages,
+            // messages: [
+            //     {
+            //         role: 'user',
+            //         content: prompt,
+            //     },
+            // ],
             stream: true,
         }),
     });

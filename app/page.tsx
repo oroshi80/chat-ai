@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 
 import { Textarea } from "@/components/ui/textarea";
-import { SendHorizontal } from "lucide-react";
+import { SendHorizontal, User2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -28,6 +28,8 @@ import rehypeSanitize from "rehype-sanitize"; // Optional for sanitizing HTML if
 import "github-markdown-css/github-markdown.css";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css"; // Use GitHub-like theme
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 
 // Types
 type Models = {
@@ -79,7 +81,11 @@ export default function Home() {
       const response = await fetch("/api/ollama", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: message, model }),
+        // body: JSON.stringify({ prompt: message, model }),
+        body: JSON.stringify({
+          messages: [...messages, { role: "user", content: message }],
+          model,
+        }),
       });
 
       const reader = response.body?.getReader();
@@ -166,13 +172,26 @@ export default function Home() {
                 }`}
               >
                 <div className="w-8 h-8 shrink-0 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
-                  {msg.role === "user" ? "🧑" : "🤖"}
+                  {msg.role === "user" ? (
+                    <Avatar>
+                      <AvatarFallback className="bg-gray-600">
+                        {" "}
+                        <User2 />{" "}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <Avatar>
+                      <AvatarFallback className="bg-gray-600">
+                        🤖
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
                 </div>
                 <div
                   className={`rounded-lg p-3 text-sm ${
                     msg.role === "user"
-                      ? "dark:bg-blue-950 bg-blue-800 text-white"
-                      : "markdown-body"
+                      ? "dark:bg-slate-700 bg-slate-500 text-white"
+                      : "dark:!bg-slate-950 !bg-slate-800 markdown-body"
                   }`}
                 >
                   <ReactMarkdown
@@ -206,19 +225,19 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </CardContent>
 
-        <CardFooter>
+        <CardFooter className="flex flex-col items-start gap-2">
           <div className="flex gap-2 items-end w-full">
             <div className="flex-1">
               <Textarea
                 className="w-full"
-                placeholder="message"
+                placeholder="Ask me anything..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.ctrlKey) {
                     console.log("CTRL+ENTER triggered");
-                    e.preventDefault(); // Prevent the default action (new line)
-                    handleAsk(); // Trigger the ask function to send the message
+                    e.preventDefault();
+                    handleAsk();
                   }
                 }}
               />
@@ -226,7 +245,7 @@ export default function Home() {
             <Button
               onClick={handleAsk}
               disabled={isLoaded}
-              className="self-end"
+              className="self-end cursor-pointer"
             >
               {isLoaded ? (
                 <Ring
@@ -241,7 +260,17 @@ export default function Home() {
               )}
             </Button>
           </div>
-          <div></div>
+
+          <div className="text-xs text-muted-foreground mt-2">
+            <span className="bg-gray-600 px-2 py-1 rounded text-gray-300">
+              Ctrl
+            </span>{" "}
+            +{" "}
+            <span className="bg-gray-600 px-2 py-1 rounded text-gray-300">
+              Enter
+            </span>{" "}
+            to send message
+          </div>
         </CardFooter>
       </Card>
     </div>
