@@ -28,8 +28,7 @@ import rehypeSanitize from "rehype-sanitize"; // Optional for sanitizing HTML if
 import "github-markdown-css/github-markdown.css";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css"; // Use GitHub-like theme
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Types
 type Models = {
