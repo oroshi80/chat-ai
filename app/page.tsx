@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { LightDark } from "./components/light-dark";
 import {
   Card,
@@ -8,7 +8,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+
+import { Textarea } from "@/components/ui/textarea";
 import { SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Ring } from "ldrs/react";
+import "ldrs/react/Ring.css";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw"; // Add this to support raw HTML in markdown
+import rehypeSanitize from "rehype-sanitize"; // Optional for sanitizing HTML if needed
+import "github-markdown-css/github-markdown.css";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css"; // Use GitHub-like theme
 
 // Types
 type Models = {
@@ -41,6 +50,7 @@ export default function Home() {
   const [models, setModels] = useState<Models[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState<string>("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const storedModel = localStorage.getItem("model");
@@ -52,83 +62,70 @@ export default function Home() {
       .catch((err) => console.error("Failed to fetch models:", err));
   }, []);
 
-  const handleAsk = async (
-    event: React.MouseEvent<HTMLButtonElement, MouseEvent>
-  ) => {
-    event.preventDefault();
+  useEffect(() => {
+    // Scroll to the bottom whenever messages or streamingMessage changes
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, streamingMessage]);
 
-    // Clear previous message to avoid appending errors
+  const handleAsk = async () => {
+    // event.preventDefault();
+    setIsLoaded(true);
+    setMessages((prev) => [...prev, { role: "user", content: message }]);
     setStreamingMessage("");
 
-    // Make the request to the backend
-    const responseStream = await fetch("/api/ollama", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt: message, model: model }),
-    });
+    try {
+      const response = await fetch("/api/ollama", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: message, model }),
+      });
 
-    const reader = responseStream.body?.getReader();
-    const decoder = new TextDecoder();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = "";
 
-    if (!reader) {
-      console.error("Error: Reader is undefined.");
-      return;
+      if (!reader) {
+        console.error("No reader from response stream.");
+        setIsLoaded(false);
+        return;
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        console.log("[Stream Chunk]:", chunk);
+
+        fullResponse = chunk; // Update with latest chunk
+        setStreamingMessage(chunk); // Show current stream
+      }
+
+      // Once done, set the final message
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: fullResponse },
+      ]);
+      setStreamingMessage("");
+      setMessage("");
+    } catch (err) {
+      console.error("Stream read error:", err);
+    } finally {
+      setIsLoaded(false);
     }
-
-    let fullResponse = ""; // This will hold the final response content
-
-    // Start processing the stream
-    const processStream = async () => {
-      const processChunk = async ({
-        done,
-        value,
-      }: ReadableStreamDefaultReader<Uint8Array>) => {
-        if (done) {
-          console.log("Stream finished.");
-          return;
-        }
-
-        // Decode the current chunk
-        const decodedChunk = decoder.decode(value, { stream: true });
-
-        // Only append if new chunk is non-empty
-        if (decodedChunk) {
-          fullResponse += decodedChunk;
-          setStreamingMessage(fullResponse); // Update UI with the new chunk
-        }
-
-        // Read the next chunk
-        reader
-          .read()
-          .then(processChunk)
-          .catch((err) => {
-            console.error("Error reading the stream:", err);
-          });
-      };
-
-      // Start the chunk reading
-      reader
-        .read()
-        .then(processChunk)
-        .catch((err) => {
-          console.error("Stream read error:", err);
-        });
-    };
-
-    // Start streaming
-    processStream();
   };
 
   return (
-    <div className="container p-4">
-      <div className="flex justify-between">
+    // <div className="flex flex-col container p-4 justify-center">
+    <div className="flex flex-col items-center justify-center h-screen p-4">
+      <div className="flex justify-between gap-4">
         <div className="text-3xl mb-4">Chat AI</div>
         <LightDark />
       </div>
 
-      <Card>
+      <Card className="w-full max-w-5xl">
         <CardHeader>
           <CardTitle>
             <div className="flex items-center">
@@ -168,17 +165,22 @@ export default function Home() {
                   msg.role === "user" ? "flex-row-reverse" : ""
                 }`}
               >
-                <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
+                <div className="w-8 h-8 shrink-0 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
                   {msg.role === "user" ? "🧑" : "🤖"}
                 </div>
                 <div
                   className={`rounded-lg p-3 text-sm ${
                     msg.role === "user"
-                      ? "bg-blue-600 text-white"
-                      : "bg-neutral-800 text-white"
+                      ? "dark:bg-blue-950 bg-blue-800 text-white"
+                      : "markdown-body"
                   }`}
                 >
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeHighlight]}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
               </div>
             </div>
@@ -190,28 +192,56 @@ export default function Home() {
                 <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
                   🤖
                 </div>
-                <div className="rounded-lg p-3 text-sm bg-neutral-800 text-white">
-                  <ReactMarkdown>{streamingMessage}</ReactMarkdown>
+                <div className="rounded-lg p-3 text-sm markdown-body">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeHighlight]}
+                  >
+                    {streamingMessage}
+                  </ReactMarkdown>
                 </div>
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </CardContent>
 
         <CardFooter>
-          <div className="flex gap-4 items-center">
-            <div className="w-full">
-              <Input
-                className="w-[600px]"
+          <div className="flex gap-2 items-end w-full">
+            <div className="flex-1">
+              <Textarea
+                className="w-full"
                 placeholder="message"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.ctrlKey) {
+                    console.log("CTRL+ENTER triggered");
+                    e.preventDefault(); // Prevent the default action (new line)
+                    handleAsk(); // Trigger the ask function to send the message
+                  }
+                }}
               />
             </div>
-            <Button onClick={handleAsk} disabled={isLoaded}>
-              <SendHorizontal />
+            <Button
+              onClick={handleAsk}
+              disabled={isLoaded}
+              className="self-end"
+            >
+              {isLoaded ? (
+                <Ring
+                  size="20"
+                  stroke="2"
+                  bgOpacity="0"
+                  speed="2"
+                  color="black"
+                />
+              ) : (
+                <SendHorizontal />
+              )}
             </Button>
           </div>
+          <div></div>
         </CardFooter>
       </Card>
     </div>

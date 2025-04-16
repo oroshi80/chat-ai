@@ -37,32 +37,41 @@ export async function POST(req: NextRequest): Promise<Response> {
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                console.log("Backend Chunk:", chunk); // Log each chunk received from Ollama
-
-                // Process the chunk and split by lines
-                for (const line of chunk.split('\n')) {
-                    if (!line.trim()) continue;
-
-                    try {
-                        const json = JSON.parse(line);
-                        if (json?.message?.content) {
-                            fullContent += json.message.content; // Concatenate all content
-
-                            // Enqueue the updated content to the frontend
-                            controller.enqueue(encoder.encode(fullContent));
-                        }
-                    } catch (err) {
-                        console.error('Invalid JSON line:', line); // Log the invalid line
-                        console.error('API error:', err);
-                    }
+                // Log each chunk for debugging
+                if (value) {
+                    const chunk = decoder.decode(value, { stream: true });
+                    console.log("Backend Chunk:", chunk); // Log each chunk received from Ollama
                 }
 
-                // If the stream is done, close it
+                // If done, break the loop
                 if (done) {
-                    controller.close();
+                    console.log("Stream done, closing controller.");
+                    controller.close();  // Signal that the stream is complete
+                    break;
+                }
+
+                // Process and split the chunk
+                if (value) {
+                    const chunk = decoder.decode(value, { stream: true });
+
+                    // Process the chunk and split by lines
+                    for (const line of chunk.split('\n')) {
+                        if (!line.trim()) continue;
+
+                        try {
+                            const json = JSON.parse(line);
+                            if (json?.message?.content) {
+                                fullContent += json.message.content; // Concatenate all content
+
+                                // Enqueue the updated content to the frontend
+                                controller.enqueue(encoder.encode(fullContent));
+                            }
+                        } catch (err) {
+                            console.error('Invalid JSON line:', line); // Log the invalid line
+                            console.error('API error:', err);
+                        }
+                    }
                 }
             }
         },
@@ -75,6 +84,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         },
     });
 }
+
 
 
 
