@@ -23,12 +23,15 @@ import { Ring } from "ldrs/react";
 import "ldrs/react/Ring.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw"; // Add this to support raw HTML in markdown
-import rehypeSanitize from "rehype-sanitize"; // Optional for sanitizing HTML if needed
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import "github-markdown-css/github-markdown.css";
 import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/github-dark.css"; // Use GitHub-like theme
+import "highlight.js/styles/github-dark.css";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { TextShimmer } from "@/components/ui/text-shimmer";
+import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input";
+import { PlaceholdersAndVanishTextarea } from "@/components/ui/placeholders-and-vanish-textarea";
 
 // Types
 type Models = {
@@ -42,6 +45,11 @@ type Models = {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  meta?: {
+    load_duration: number;
+    total_duration: number;
+    eval_count: number;
+  };
 };
 
 export default function Home() {
@@ -49,9 +57,20 @@ export default function Home() {
   const [message, setMessage] = useState<string>("");
   const [model, setModel] = useState<string | undefined>(undefined);
   const [models, setModels] = useState<Models[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [streamingMessage, setStreamingMessage] = useState<string>("");
+  const [isThinking, setIsThinking] = useState(false); //same as isLoading
+  const [thinkingStage, setThinkingStage] = useState<"thinking" | "generating">(
+    "thinking"
+  );
+  const shimmerRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const placeholders = [
+    "Ask anything...",
+    "Who is David Tennant?",
+    "Where is Loch Ness lake?",
+    "Write a Javascript method to reverse a string",
+    "How to assemble your own PC?",
+  ];
 
   useEffect(() => {
     const storedModel = localStorage.getItem("model");
@@ -64,73 +83,100 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Scroll to the bottom whenever messages or streamingMessage changes
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, streamingMessage]);
+  }, [messages, isThinking]);
+
+  useEffect(() => {
+    if (!isThinking) return;
+
+    const timer = setTimeout(() => {
+      setThinkingStage("generating");
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [isThinking]);
 
   const handleAsk = async () => {
-    // event.preventDefault();
-    setIsLoaded(true);
-    setMessages((prev) => [...prev, { role: "user", content: message }]);
-    setStreamingMessage("");
+    // if (!message.trim() || !model) return;
+    if (!message.trim() || !model || isThinking) return; // Add isThinking check
+
+    setIsThinking(true);
+
+    const newUserMessage: ChatMessage = { role: "user", content: message };
+    setMessages((prev) => [...prev, newUserMessage]);
+    setMessage("");
 
     try {
       const response = await fetch("/api/ollama", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // body: JSON.stringify({ prompt: message, model }),
         body: JSON.stringify({
-          messages: [...messages, { role: "user", content: message }],
+          messages: [...messages, newUserMessage],
           model,
         }),
       });
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = "";
+      const data = await response.json();
+      const parsed =
+        typeof data.content === "string" ? JSON.parse(data.content) : data;
 
-      if (!reader) {
-        console.error("No reader from response stream.");
-        setIsLoaded(false);
-        return;
+      console.log("Raw response from /api/ollama:", data);
+
+      if (!parsed.message || !parsed.message.content) {
+        throw new Error("Invalid response: message content missing");
       }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const assistantContent = parsed.message.content;
+      const meta = {
+        load_duration: parsed.load_duration,
+        total_duration: parsed.total_duration,
+        eval_count: parsed.eval_count,
+      };
 
-        const chunk = decoder.decode(value, { stream: true });
-        console.log("[Stream Chunk]:", chunk);
+      const words = assistantContent.split(" ");
+      let i = 0;
+      let currentText = "";
 
-        fullResponse = chunk; // Update with latest chunk
-        setStreamingMessage(chunk); // Show current stream
-      }
-
-      // Once done, set the final message
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: fullResponse },
+        { role: "assistant", content: "", meta },
       ]);
-      setStreamingMessage("");
-      setMessage("");
+
+      const updateMessageGradually = () => {
+        if (i < words.length) {
+          currentText += (i > 0 ? " " : "") + words[i];
+          setMessages((prev) =>
+            prev.map((msg, idx) =>
+              idx === prev.length - 1
+                ? { ...msg, content: currentText, meta }
+                : msg
+            )
+          );
+          i++;
+          shimmerRef.current = window.setTimeout(updateMessageGradually, 50);
+        } else {
+          shimmerRef.current = null;
+        }
+      };
+
+      updateMessageGradually();
     } catch (err) {
-      console.error("Stream read error:", err);
+      console.error("Fetch error:", err);
     } finally {
-      setIsLoaded(false);
+      setIsThinking(false);
     }
   };
 
   return (
-    // <div className="flex flex-col container p-4 justify-center">
     <div className="flex flex-col items-center justify-center h-screen p-4">
       <div className="flex justify-between gap-4">
         <div className="text-3xl mb-4">Chat AI</div>
         <LightDark />
       </div>
 
-      <Card className="w-full max-w-5xl">
+      <Card className="w-full max-w-6xl">
         <CardHeader>
           <CardTitle>
             <div className="flex items-center">
@@ -170,22 +216,12 @@ export default function Home() {
                   msg.role === "user" ? "flex-row-reverse" : ""
                 }`}
               >
-                <div className="w-8 h-8 shrink-0 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
-                  {msg.role === "user" ? (
-                    <Avatar>
-                      <AvatarFallback className="bg-gray-600">
-                        {" "}
-                        <User2 />{" "}
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : (
-                    <Avatar>
-                      <AvatarFallback className="bg-gray-600">
-                        🤖
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                </div>
+                <Avatar>
+                  <AvatarFallback className="bg-gray-600">
+                    {msg.role === "user" ? <User2 /> : "🤖"}
+                  </AvatarFallback>
+                </Avatar>
+
                 <div
                   className={`rounded-lg p-3 text-sm ${
                     msg.role === "user"
@@ -199,42 +235,54 @@ export default function Home() {
                   >
                     {msg.content}
                   </ReactMarkdown>
+
+                  {msg.meta && (
+                    <div className="text-xs text-muted-foreground mt-2 border-t pt-2 opacity-70">
+                      ⏱ Load: {(msg.meta.load_duration / 1e9).toFixed(2)}s •
+                      Total: {(msg.meta.total_duration / 1e9).toFixed(2)}s •
+                      Evals: {msg.meta.eval_count}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           ))}
 
-          {streamingMessage && (
-            <div className="flex justify-start">
-              <div className="flex items-start gap-2 max-w-[80%]">
-                <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
-                  🤖
-                </div>
-                <div className="rounded-lg p-3 text-sm markdown-body">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeHighlight]}
-                  >
-                    {streamingMessage}
-                  </ReactMarkdown>
-                </div>
-              </div>
+          {/* Shimmer Loading */}
+          {isThinking && (
+            <div className="flex items-center gap-4">
+              <Avatar>
+                <AvatarFallback className="bg-gray-600">🤖</AvatarFallback>
+              </Avatar>
+
+              <TextShimmer className="" duration={1}>
+                {thinkingStage === "thinking"
+                  ? "I'm thinking..."
+                  : "Generating..."}
+              </TextShimmer>
             </div>
           )}
+
           <div ref={messagesEndRef} />
         </CardContent>
 
         <CardFooter className="flex flex-col items-start gap-2">
           <div className="flex gap-2 items-end w-full">
             <div className="flex-1">
-              <Textarea
+              <PlaceholdersAndVanishTextarea
+                placeholders={placeholders}
+                onChange={(e) => setMessage(e.target.value)}
+                onSubmit={handleAsk}
+                disabled={isThinking} // ✅ prevent input while AI is thinking
+              />
+            </div>
+            {/* <Textarea
                 className="w-full"
                 placeholder="Ask me anything..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.ctrlKey) {
-                    console.log("CTRL+ENTER triggered");
                     e.preventDefault();
                     handleAsk();
                   }
@@ -257,7 +305,7 @@ export default function Home() {
               ) : (
                 <SendHorizontal />
               )}
-            </Button>
+            </Button> */}
           </div>
 
           <div className="text-xs text-muted-foreground mt-2">
@@ -268,7 +316,7 @@ export default function Home() {
             <span className="bg-gray-600 px-2 py-1 rounded text-gray-300">
               Enter
             </span>{" "}
-            to send message
+            to break a new line
           </div>
         </CardFooter>
       </Card>
