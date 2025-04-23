@@ -29,10 +29,14 @@ import rehypeSanitize from "rehype-sanitize";
 import "github-markdown-css/github-markdown.css";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 // import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input";
 import { PlaceholdersAndVanishTextarea } from "@/components/ui/placeholders-and-vanish-textarea";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { Infinity } from "ldrs/react";
+import "ldrs/react/Infinity.css";
 
 // Types
 type Models = {
@@ -54,6 +58,8 @@ type ChatMessage = {
 };
 
 export default function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState<string>("");
   const [model, setModel] = useState<string | undefined>(undefined);
@@ -170,11 +176,44 @@ export default function Home() {
     }
   };
 
+  // auth required
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/auth/signin");
+    }
+  }, [status, router]);
+
+  if (status === "loading") {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Infinity
+          size="100"
+          stroke="4"
+          strokeLength="0.15"
+          bgOpacity="0.1"
+          speed="1.3"
+          color="green"
+        />
+      </div>
+    );
+  }
+  if (status === "unauthenticated") return null;
+
   return (
     <div className="flex flex-col items-center justify-center h-screen p-4">
-      <div className="flex justify-between gap-4">
+      <div className="w-full max-w-6xl flex justify-between gap-4">
+        <div></div>
         <div className="text-3xl mb-4">Chat AI</div>
         <LightDark />
+        <Avatar>
+          <AvatarImage
+            src={session?.user?.image || ""}
+            alt={`@${session?.user?.name}`}
+          />
+          <AvatarFallback className="bg-gray-800">
+            {session?.user?.name?.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
       </div>
 
       <Card className="w-full max-w-6xl">
