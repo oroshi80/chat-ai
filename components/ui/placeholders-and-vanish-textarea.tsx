@@ -40,9 +40,11 @@ export function PlaceholdersAndVanishTextarea({
       if (intervalRef.current) clearInterval(intervalRef.current);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
+    //eslint-disable-next-line
   }, [placeholders]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  //eslint-disable-next-line
   const newDataRef = useRef<any[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState("");
@@ -65,12 +67,13 @@ export function PlaceholdersAndVanishTextarea({
 
     const imageData = ctx.getImageData(0, 0, 800, 800);
     const pixelData = imageData.data;
+    //eslint-disable-next-line
     const newData: any[] = [];
 
     for (let t = 0; t < 800; t++) {
-      let i = 4 * t * 800;
+      const i = 4 * t * 800;
       for (let n = 0; n < 800; n++) {
-        let e = i + 4 * n;
+        const e = i + 4 * n;
         if (
           pixelData[e] !== 0 &&
           pixelData[e + 1] !== 0 &&
@@ -177,6 +180,7 @@ export function PlaceholdersAndVanishTextarea({
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     vanishAndSubmit();
+    //eslint-disable-next-line
     onSubmit && onSubmit(e);
   };
 
@@ -199,6 +203,7 @@ export function PlaceholdersAndVanishTextarea({
         onChange={(e) => {
           if (!animating) {
             setValue(e.target.value);
+            //eslint-disable-next-line
             onChange && onChange(e);
           }
         }}
@@ -208,6 +213,7 @@ export function PlaceholdersAndVanishTextarea({
           const text = e.clipboardData.getData("text");
           const newValue = value + text;
           setValue(newValue);
+          //eslint-disable-next-line
           onChange({ ...e, target: { value: newValue } } as any);
         }}
         ref={inputRef}

@@ -9,9 +9,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-import { Textarea } from "@/components/ui/textarea";
-import { SendHorizontal, User2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+// import { Textarea } from "@/components/ui/textarea";
+// import { SendHorizontal, User2 } from "lucide-react";
+import { User2 } from "lucide-react";
+// import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -19,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Ring } from "ldrs/react";
+// import { Ring } from "ldrs/react";
 import "ldrs/react/Ring.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -30,7 +31,7 @@ import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { TextShimmer } from "@/components/ui/text-shimmer";
-import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input";
+// import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input";
 import { PlaceholdersAndVanishTextarea } from "@/components/ui/placeholders-and-vanish-textarea";
 
 // Types
