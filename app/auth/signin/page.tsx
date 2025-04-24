@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { InteractiveGridPattern } from "@/components/magicui/interactive-grid-pattern";
 import { ShimmerButton } from "@/components/magicui/shimmer-button";
+import Image from "next/image";
 
 type Provider = {
   id: string;
@@ -43,9 +44,11 @@ export default function SignInPage() {
               >
                 <div className="flex justify-between items-center w-full text-white">
                   <span>Sign in with {provider.name}</span>
-                  <img
+                  <Image
                     src={`https://authjs.dev/img/providers/${provider.id}.svg`}
-                    className="w-6 h-6 bg-accent rounded-full"
+                    className="bg-accent rounded-full"
+                    width={24}
+                    height={24}
                     alt={provider.name}
                   />
                 </div>
